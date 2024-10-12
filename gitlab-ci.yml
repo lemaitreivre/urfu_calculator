@@ -1,0 +1,70 @@
+stages:
+  - build
+  - scan
+  - deploy
+
+
+build_image:
+  stage: build
+  image: docker:27
+  services:
+    - name: docker:27-dind
+      alias: docker
+  script:
+    - echo "$DOCKER_HUB_PASSWD" | docker login -u $DOCKER_HUB_LOGIN --password-stdin
+    - docker build -t $IMAGE .
+    - docker push $IMAGE
+
+trivy_scan:
+  stage: scan
+  image: 
+    name: aquasec/trivy:0.56.0
+    entrypoint: [""]
+  script:
+    - trivy image --image-config-scanners misconfig,secret --format json -o trivy-report.json $IMAGE
+  artifacts:
+    paths:
+      - trivy-report.json
+
+semgrep_scan:
+  stage: scan
+  image: returntocorp/semgrep:latest
+  script:
+    - ls $CI_PROJECT_DIR
+    - semgrep --config auto --json --output semgrep-report.json $CI_PROJECT_DIR
+  artifacts:
+    paths:
+      - semgrep-report.json
+
+bandit_scan:
+  stage: scan
+  image: python:3.9
+  before_script:
+    - pip install bandit
+  script:
+    - bandit -r calc.py -f json -o bandit-report.json || true
+    - cat bandit-report.json
+  artifacts:
+    paths:
+      - bandit-report.json
+
+deploy&test:
+  stage: deploy
+  image: docker:27
+  services:
+    - name: $IMAGE
+      alias: calculator
+  script:
+    - apk add curl
+    - |
+        curl -X POST http://calculator:5000/calculate \
+          -H "Content-Type: application/json" \
+          -d '{"a": 10, "b": 7, "operator": "*"}'
+    - |
+        curl -X POST http://calculator:5000/calculate \
+          -H "Content-Type: application/json" \
+          -d '{"a": 10, "b": 0, "operator": "/"}'
+    - |
+        curl -X POST http://calculator:5000/calculate \
+          -H "Content-Type: application/json" \
+          -d '{"a": 10, "b": 7, "operator": "e"}'
