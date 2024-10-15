@@ -17,7 +17,7 @@
 ## Развертывание gitlab
 Для непрерывной интеграции нам понадобится gitlab.
 Создаём docker-compose.yml для запуска контейнеров с gitlab и gitlab-runner:
-`
+```
 version: '2.6'
 services:
   gitlab:
@@ -56,7 +56,7 @@ networks:
   gitlab_net:
     driver: bridge
 ```
-Запускаем контейнеры командой ```docker compose up -d```
+Запускаем контейнеры командой docker compose up -d
 ![image](https://github.com/user-attachments/assets/f3a7c4b6-af64-4642-8595-cb0ffb313294)
 
 URL для перехода в gitlab через браузер: https://<ip-адрес машины>
