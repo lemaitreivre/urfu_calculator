@@ -1,9 +1,9 @@
-##Калькулятор
+## Калькулятор
 Напишем простой API-калькулятор на Flask, который принимает и обрабатывает POST-запрос от пользователя.
 Также опишем необходимые зависимости в requirements.txt
 Для работы использовался Ubuntu Linux 20.04
 
-##Docker
+## Docker
 Напишем Dockerfile для сборки и запуска контейнера, где используется базовый образ python, устанавливаются зависимости и запускается наше приложение calc.py
 Для начала соберем и запустим контейнер локально
 Сборка:
@@ -14,10 +14,10 @@
 Проверка работы приложения:
 ![image](https://github.com/user-attachments/assets/aa06f264-c073-473d-b73d-a1694a13e851)
 
-##Развертывание gitlab
+## Развертывание gitlab
 Для непрерывной интеграции нам понадобится gitlab.
 Создаём docker-compose.yml для запуска контейнеров с gitlab и gitlab-runner:
-
+`
 version: '2.6'
 services:
   gitlab:
@@ -55,16 +55,18 @@ services:
 networks:
   gitlab_net:
     driver: bridge
-Запускаем контейнеры командой docker compose up -d
+```
+Запускаем контейнеры командой ```docker compose up -d```
 ![image](https://github.com/user-attachments/assets/f3a7c4b6-af64-4642-8595-cb0ffb313294)
 
 URL для перехода в gitlab через браузер: https://<ip-адрес машины>
 ![image](https://github.com/user-attachments/assets/74e8f0a5-647d-459d-9f2c-5cf50141cf1f)
 Чтобы сбросить пароль рута и установить новый нужно выполнить следующие команды:
-
+```
 docker exec -it gitlab /bin/bash
 cd /etc/gitlab
 gitlab-rake "gitlab:password:reset[root]"
+```
 После этого можем успешно войти под именем root
 ![image](https://github.com/user-attachments/assets/84595657-f2a9-46a1-a17f-660ce9e0bd4e)
 
@@ -78,13 +80,26 @@ gitlab-rake "gitlab:password:reset[root]"
 
 
 Создаем ключи и сертификаты в директории /srv/gitlab/config/ssl для корректной работы раннера
-
+```
 openssl genrsa -out ca.key 2048
 openssl req -new -x509 -days 3654 -key ca.key -subj "/C=CN/ST=GD/L=SZ/O=Acme, Inc./CN=Acme Root CA" -out ca.crt
 openssl req -newkey rsa:2048 -nodes -keyout gitlab.example.com.key -subj "/C=CN/ST=GD/L=SZ/O=Acme, Inc./CN=*.example.com" -out gitlab.example.com.csr
 openssl x509 -req -extfile <(printf "subjectAltName=DNS:example.com,DNS:www.example.com,DNS:gitlab.example.com") -days 365 -in gitlab.example.com.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out gitlab.example.com.crt
+```
 ![image](https://github.com/user-attachments/assets/d086f312-f627-4869-8199-2c0b98273fe8)
 
 Подкладываем в /srv/gitlab-runner ca.crt.
-![image](https://github.com/user-attachments/assets/5a7ae129-2762-45d2-bd9e-055aa05f176f)
+![image](https://github.com/user-attachments/assets/3968b38b-fa5f-4f0b-9ad1-566cf94ef9a9)
+
+Регистрируем раннер:
+```
+docker exec -it gitlab-runner /bin/bash
+gitlab-runner register --url "https://gitlab.example.com" --tls-ca-file=/etc/gitlab-runner/ca.crt --registration-token "<token>"
+```
+![image](https://github.com/user-attachments/assets/4940dddd-e7ff-4916-9d55-c265fc169839)
+
+Token раннера необходимо создать в проекте -> Settings -> CI/CD -> Runners -> New project runner image
+![image](https://github.com/user-attachments/assets/8575fd9d-06f9-42bc-9e89-0523332e58b7)
+
+Gitlab и gitlab-runner должны находится в одной сети.
 
