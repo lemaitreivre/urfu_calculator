@@ -1,4 +1,4 @@
-## Калькулятор
+![image](https://github.com/user-attachments/assets/b4a29bf1-181a-42ef-b1b1-79a4b281e3af)## Калькулятор
 Напишем простой API-калькулятор на Flask, который принимает и обрабатывает POST-запрос от пользователя.
 Также опишем необходимые зависимости в requirements.txt
 Для работы использовался Ubuntu Linux 20.04
@@ -11,7 +11,7 @@
 Запуск контейнера:
 ![image](https://github.com/user-attachments/assets/33452894-088c-43c2-9ef3-7e436e05ca08)
 
-Проверка работы приложения:
+Проверка работы приложения при помощи curl:
 ![image](https://github.com/user-attachments/assets/aa06f264-c073-473d-b73d-a1694a13e851)
 
 ## Развертывание gitlab
@@ -90,6 +90,7 @@ openssl x509 -req -extfile <(printf "subjectAltName=DNS:example.com,DNS:www.exam
 
 Подкладываем в /srv/gitlab-runner ca.crt.
 ![image](https://github.com/user-attachments/assets/3968b38b-fa5f-4f0b-9ad1-566cf94ef9a9)
+### После данного шага нужно обязательно перезапустить контейнеры командой docker compose restart, чтобы сертификаты заработали, иначе появится ошибка
 
 Регистрируем раннер:
 ```
@@ -101,5 +102,50 @@ gitlab-runner register --url "https://gitlab.example.com" --tls-ca-file=/etc/git
 Token раннера необходимо создать в проекте -> Settings -> CI/CD -> Runners -> New project runner image
 ![image](https://github.com/user-attachments/assets/8575fd9d-06f9-42bc-9e89-0523332e58b7)
 
-Gitlab и gitlab-runner должны находится в одной сети.
+Gitlab и gitlab-runner обязательно должны находится в одной сети, чтобы взаимодействовать между собой.
 
+## Pipeline
+В проекте создаем .gitlab-ci.yml, который будет задавать инструкции для раннера. Разместим Dockerfile, calc.py и requirements.txt в проект. Теперь каждый раз при пуше кода в репозиторий будет отрабатывать пайплайн. В начале будет произведена сборка образа из файлов репозитория, далее образ будет запушен в Docker hub. С помощью trivy будет просканирован собранный образ, с помощью semgrep вся директория, с помощью bandit только калькулятор на python. Репорты будут направлены в артефакты для дальнейшего анализа. Далее запускается контейнер с калькулятором и тестируется при помощи curl.
+![image](https://github.com/user-attachments/assets/a96dcc14-e9b9-44f8-b493-dbea8a2abe4f)
+
+Переменные для пайплайна были добавлены в Settings -> CI/CD -> Variables:
+![image](https://github.com/user-attachments/assets/63411361-29dd-42dd-93f7-3dacb84fd504)
+### Также не забываем указывать свой никнейм, чтобы ваш image можно было скачать с докерхаба, как здесь:
+![image](https://github.com/user-attachments/assets/55919a99-1bfa-4b4d-b092-dc44d69325fe)
+### Помимо этого необходимо добавить имя сети, в которой находятся наши контейнеры, которые можно узнать при помощи docker network ls:
+![image](https://github.com/user-attachments/assets/58778f68-c0a9-406b-b2b3-2633c814a256)
+### В моем случае это calc_gitlab_net, нужно добавить эту сеть в конфигурационный файл /etc/gitlab-runner/config.toml при помощи редактора vim
+![image](https://github.com/user-attachments/assets/75733a55-88dc-4f52-ad0f-86dd7fd73866)
+
+Запускаем пайплайн:
+![image](https://github.com/user-attachments/assets/868d10d4-6158-44d9-ae27-d173a03dbd19)
+
+
+Вывод отработки задач:
+![image](https://github.com/user-attachments/assets/40e4f551-d317-4d9f-8e6a-d38cd36b9159)
+
+
+Сохраненные артефакты после сканирования:
+![image](https://github.com/user-attachments/assets/c43c4475-5cff-4f3f-8748-daf899b561a7)
+
+
+## Разбор отчетов
+### bandit:
+High: Приложение Flask, по-видимому, запускается с параметром debug=True, который предоставляет доступ к отладчику Werkzeug и позволяет выполнять произвольный код
+![image](https://github.com/user-attachments/assets/3a1c1651-8973-4bb2-9c14-f3f2c478f296)
+
+Medium: Возможна привязка ко всем интерфейсам. Это значит, что приложение может быть доступно со всех сетевых интерфейсов машины, что является уязвимостью.
+![image](https://github.com/user-attachments/assets/ddea3fa8-e071-49d5-8a3d-82e5ac9e5074)
+
+
+### semgrep:
+Содержит такие же уязвимости, что и bandit
+
+### trivy:
+
+Большинство уязвимостей связаны с системными пакетами Debian. Данные уязвимости можно исключить путем обновления пакетов до новейшей версии.
+Также было найдено несколько уязвимостей в пакетах python, которые также следует обновить.
+
+Помимо этого была найдена уязвимость в конфигурации образа:
+![image](https://github.com/user-attachments/assets/214d1bca-887d-43be-bccf-798c4655adde)
+Чтобы ее исправить, нужно запускать контейнер не от имени пользователя root, чтобы лишить злоумышленника каких-либо привилегий в случае container escape.
